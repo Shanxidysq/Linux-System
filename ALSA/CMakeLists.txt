@@ -4,10 +4,11 @@ cmake_minimum_required(VERSION 3.0)
 # 项目名称
 project(ALSA)
 
-# exe name - 修正拼写错误
+# exe name 
 set(TARGET main)
 
 # 添加链接库
+# 在arm-linux-gcc 交叉编译环境下是否也可以呢
 find_package(ALSA REQUIRED)
 
 # 增加inc路径
