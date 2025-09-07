@@ -20,7 +20,7 @@ namespace ox
     // 析构函数
     AlsaCapture::~AlsaCapture()
     {
-        // Close();
+        Close();
 #if 0
         if(nullptr != m_pcm_handle)
         {

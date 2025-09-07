@@ -58,7 +58,7 @@ int main(int argc,char* argv[])
         int len=0;
         play.WriteFrame((const uint8_t*)buffer,1024,&len);
         cout<<"成功写入%d:"<<len<<"字节"<<endl;
-        if(ios::cur == ios::end)
+        if(file.eof())
         {
             // wav文件读取完毕
             cout <<"音乐播放完毕"<<endl;
