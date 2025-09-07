@@ -12,7 +12,7 @@ namespace ox
     class AlsaPlayback
     {
     public:
-        AlsaPlayback(const std::string &device, int sample_rate, int channels);
+        AlsaPlayback(const std::string device, int sample_rate, int channels);
         ~AlsaPlayback();
         // 打开设备
         bool Open();

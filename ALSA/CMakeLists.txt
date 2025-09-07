@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.0)
 project(ALSA)
 
 # exe name 
-set(TARGET main)
+set(TARGET play)
 
 # 添加链接库
 # 在arm-linux-gcc 交叉编译环境下是否也可以呢
@@ -20,8 +20,11 @@ include_directories(
 # 收集src目录下的源文件到SOURCE_LIST 
 aux_source_directory(src SOURCE_LIST)
 
-# 生成exe
-add_executable(${TARGET} ${SOURCE_LIST} main.cpp)
+# test capture
+# add_executable(${TARGET} ${SOURCE_LIST} main.cpp)
+
+# test playback
+add_executable(${TARGET} ${SOURCE_LIST} testplayback.cpp)
 
 # 链接库 - 放在add_executable之后
 target_link_libraries(${TARGET} PRIVATE ${ALSA_LIBRARIES})
