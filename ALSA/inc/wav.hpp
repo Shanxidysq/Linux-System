@@ -6,6 +6,7 @@ namespace ox
     class WAVHeader
     {
     public:
+        // 按照wav帧头格式设备 memcpy 拷贝44字节内存即可访问帧头数据
         uint8_t riff[4] = {};
         uint32_t file_size = 0;
         uint8_t wave[4] = {};

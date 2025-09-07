@@ -30,9 +30,9 @@ int main()
         if(ios::cur == ios::end)
         {
             // wav文件读取完毕
+            cout <<"音乐播放完毕"<<endl;
             break;
         }
-
     }
-
+    exit(0);
 }
