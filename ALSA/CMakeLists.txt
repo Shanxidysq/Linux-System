@@ -21,13 +21,14 @@ include_directories(
 aux_source_directory(src SOURCE_LIST)
 
 # test capture
-# add_executable(${TARGET} ${SOURCE_LIST} main.cpp)
+add_executable(capture ${SOURCE_LIST} testcapture.cpp)
 
 # test playback
 add_executable(${TARGET} ${SOURCE_LIST} testplayback.cpp)
 
 # 链接库 - 放在add_executable之后
 target_link_libraries(${TARGET} PRIVATE ${ALSA_LIBRARIES})
+target_link_libraries(capture PRIVATE ${ALSA_LIBRARIES})
 
 # 设置exe文件的生成路径
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)

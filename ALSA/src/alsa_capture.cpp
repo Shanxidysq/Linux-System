@@ -1,5 +1,5 @@
 #include "alsa_capture.hpp"
-
+#include "wav.hpp"
 namespace ox
 {
     // 构造函数
@@ -194,7 +194,7 @@ namespace ox
             }
         }
         *frames_read = err;
-        std::cout<<"采集数据成功"<<std::endl;
+        std::cout << "采集数据成功" << std::endl;
         return true;
     }
 
@@ -318,4 +318,12 @@ namespace ox
         return m_pcm_handle != nullptr;
     }
 
+    void AlsaCapture::SetWavFrames(WAVHeader &wav) const
+    {
+        wav.channels = m_channels;
+        wav.sample_rate = m_sample_rate;
+        wav.bits_per_sample = 16;              // 固定
+        wav.block_align = m_channels * 16 / 8; // 即 channels*2
+        wav.byte_rate = m_sample_rate * wav.block_align;
+    }
 }

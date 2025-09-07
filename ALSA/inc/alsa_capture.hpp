@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <alsa/asoundlib.h>
 #include <alsa/pcm.h>
-
+#include "wav.hpp"
 // 个人命名空间
 namespace ox
 {
@@ -47,7 +47,9 @@ namespace ox
         bool IsOpened() const ;
         // 设置格式
         bool SetFormat(snd_pcm_format_t format);
-
+        
+        // 增加方法适配aplay 适配报头信息
+        void SetWavFrames(WAVHeader& wav) const;
     private:
         // 设备路径
         std::string m_device;

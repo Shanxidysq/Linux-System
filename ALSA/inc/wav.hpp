@@ -1,8 +1,12 @@
 #ifndef __WAV_HPP__
 #define __WAV_HPP__
 #include <iostream>
+#include <cstring>
 namespace ox
 {
+    // 强制帧头1字节对齐避免编译器进行了结构体内存对齐优化
+#pragma pack(push, 1)
+    // wav格式帧头
     class WAVHeader
     {
     public:
@@ -20,6 +24,17 @@ namespace ox
         uint16_t bits_per_sample = 0;
         uint8_t data_id[4] = {};
         uint32_t data_size = 0;
+
+        WAVHeader()
+        {
+            memcpy(riff, "RIFF", 4);
+            memcpy(wave, "WAVE", 4);
+            memcpy(fmt_id, "fmt ", 4);
+            memcpy(data_id, "data", 4);
+            fmt_size = 16;
+            format_tag = 1;
+        }
     };
+#pragma pack(pop)
 }
 #endif

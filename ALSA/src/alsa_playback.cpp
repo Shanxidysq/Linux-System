@@ -2,6 +2,7 @@
 // #define QUERY
 namespace ox
 {
+    //一个完整的播放器 自适应参数应该修改一下这一点
     // 名字空间域下搭建
     // 默认构造函数
     AlsaPlayback::AlsaPlayback(const std::string device, int sample_rate, int channels)
