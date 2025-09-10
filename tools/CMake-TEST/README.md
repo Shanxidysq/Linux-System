@@ -84,3 +84,16 @@ message(STATUS "Using C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "Using C++ compiler: ${CMAKE_CXX_COMPILER}")
 message(STATUS "Using sysroot: ${CMAKE_SYSROOT}")
 ```
+
+
+## sample工程
+在sample工程中提供了关于CMake构建交叉编译项目的示例
+
+    bin:最终编译出来的可执行文件存放路径
+    inc:项目头文件
+    src:项目源文件
+    toolchain: ***.cmake交叉工具链文件
+然后在项目根目录下面的主CMakeLists.txt执行主要的编译逻辑，如果引入了其他模块需要其他独立的编译逻辑可以添加二级CMakeLists.txt文件
+
+main.c程序文件，可以根据自己的情况存放在哪里，我一般喜欢存放在根目录下面，存放在src下面也可以
+
