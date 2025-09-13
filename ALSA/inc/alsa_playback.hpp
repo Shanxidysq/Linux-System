@@ -31,6 +31,8 @@ namespace ox
 
     private:
         // 设置参数
+        size_t Downmix6to2(int16_t *buf, size_t bytes_in);
+        bool m_downmix = false;   // 是否需要软件降混
         bool SetParams();
         std::string m_device;
         int m_sample_rate;

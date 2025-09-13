@@ -94,3 +94,38 @@ target_link_libraries(${TARGET} PRIVATE ${ALSA_LIBRARIES})
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 ```
+
+## 混音问题
+在我之前使用2ch的音频播放是没有任何问题的，但是使用了6ch通道的音频播放因为设备不支持，所以我们需要针对6ch的音频进行降低混音，做好兼容性处理
+兼容混音需要进行一个数据压缩的方式，2通道的16bit样本数据范围` −32768…32767`
+所以我们需要对数据进行压缩
+```cpp
+    template <class T>
+    inline constexpr T clamp(const T &v, const T &lo, const T &hi)
+    {
+        return std::max(lo, std::min(v, hi));
+    }
+    size_t AlsaPlayback::Downmix6to2(int16_t *buf, size_t bytes_in)
+    {
+        const size_t samples_in = bytes_in / sizeof(int16_t);
+        const size_t frames_in = samples_in / 6;
+        const size_t samples_out = frames_in * 2;
+
+        const float scale = 0.707f;
+        for (size_t i = 0; i < frames_in; ++i)
+        {
+            int16_t *in = buf + i * 6;
+            int16_t *out = buf + i * 2;
+
+            int32_t L = in[0] + scale * in[2] + scale * (in[4] + in[5]);
+            int32_t R = in[1] + scale * in[2] + scale * (in[4] + in[5]);
+
+            out[0] = clamp(L, -32768, 32767);
+            out[1] = clamp(R, -32768, 32767);
+        }
+        return samples_out * sizeof(int16_t);
+    }
+```
+
+裁剪操作clamp在c++17开始直接，这里我们直接使用模板元实现clamp操作
+然后通过混音的数据压缩，并且标志一次混音处理，在将数据通过DMA写入音频的缓冲区时，先判断，这样更好的兼容了处理其他多声道的数据格式

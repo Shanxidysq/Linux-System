@@ -1,10 +1,14 @@
 #include "alsa_playback.hpp"
+#include <iostream>
+#include <vector>
+#include <cstring>
+using namespace std;
 // #define QUERY
 namespace ox
 {
-    //一个完整的播放器 自适应参数应该修改一下这一点
-    // 名字空间域下搭建
-    // 默认构造函数
+    // 一个完整的播放器 自适应参数应该修改一下这一点
+    //  名字空间域下搭建
+    //  默认构造函数
     AlsaPlayback::AlsaPlayback(const std::string device, int sample_rate, int channels)
         : m_device(device), m_sample_rate(sample_rate), m_channels(channels),
           m_pcm_handle(nullptr), m_format(SND_PCM_FORMAT_S16_LE)
@@ -71,6 +75,16 @@ namespace ox
             std::cerr << " 设备未打开 " << std::endl;
             return false;
         }
+        /* 需要降混？ */
+        if (m_downmix)
+        {
+            static thread_local std::vector<uint8_t> stereo;
+            stereo.resize(buffer_size);
+            std::memcpy(stereo.data(), buffer, buffer_size);
+            buffer_size = Downmix6to2(reinterpret_cast<int16_t *>(stereo.data()),
+                                   buffer_size);
+            buffer = stereo.data();
+        }
         // 计算可以写入的最大帧数
         int max_frames = buffer_size / (m_channels * GetBytesPerSample());
 
@@ -107,76 +121,121 @@ namespace ox
         return true;
     }
 
+    // 降低混音
+    // 把 6ch interleaved S16_LE 降混成 2ch，结果就地覆盖原 buffer
+    // 返回：新的字节数（= 原大小 / 3）
+    // c++11 不支持slamp裁减操作
+    template <class T>
+    inline constexpr T clamp(const T &v, const T &lo, const T &hi)
+    {
+        return std::max(lo, std::min(v, hi));
+    }
+    size_t AlsaPlayback::Downmix6to2(int16_t *buf, size_t bytes_in)
+    {
+        const size_t samples_in = bytes_in / sizeof(int16_t);
+        const size_t frames_in = samples_in / 6;
+        const size_t samples_out = frames_in * 2;
+
+        const float scale = 0.707f;
+        for (size_t i = 0; i < frames_in; ++i)
+        {
+            int16_t *in = buf + i * 6;
+            int16_t *out = buf + i * 2;
+
+            int32_t L = in[0] + scale * in[2] + scale * (in[4] + in[5]);
+            int32_t R = in[1] + scale * in[2] + scale * (in[4] + in[5]);
+
+            out[0] = clamp(L, -32768, 32767);
+            out[1] = clamp(R, -32768, 32767);
+        }
+        return samples_out * sizeof(int16_t);
+    }
+
     bool AlsaPlayback::SetParams()
     {
-        // 设置音频参数
         snd_pcm_hw_params_t *params;
         snd_pcm_hw_params_alloca(&params);
 
-        // 初始化参数结构
+        /* 1. 初始化参数结构 */
         int err = snd_pcm_hw_params_any(m_pcm_handle, params);
         if (err < 0)
         {
-            std::cerr << "无法初始化音频参数: " << snd_strerror(err) << std::endl;
+            std::cerr << "无法初始化硬件参数: " << snd_strerror(err) << std::endl;
             return false;
         }
 
-        // 设置访问类型
-        err = snd_pcm_hw_params_set_access(m_pcm_handle, params, SND_PCM_ACCESS_RW_INTERLEAVED);
+        /* 2. 访问类型 */
+        err = snd_pcm_hw_params_set_access(m_pcm_handle, params,
+                                           SND_PCM_ACCESS_RW_INTERLEAVED);
         if (err < 0)
         {
-            std::cerr << "无法设置音频访问类型: " << snd_strerror(err) << std::endl;
+            std::cerr << "无法设置访问类型: " << snd_strerror(err) << std::endl;
             return false;
         }
 
-        // 设置格式（16位有符号小端）
+        /* 3. 采样格式 */
         err = snd_pcm_hw_params_set_format(m_pcm_handle, params, m_format);
         if (err < 0)
         {
-            std::cerr << "无法设置音频格式: " << snd_strerror(err) << std::endl;
+            std::cerr << "无法设置采样格式: " << snd_strerror(err) << std::endl;
             return false;
         }
 
-        // 设置通道数
-        err = snd_pcm_hw_params_set_channels(m_pcm_handle, params, m_channels);
-        if (err < 0)
-        {
-            std::cerr << "无法设置音频通道数: " << snd_strerror(err) << std::endl;
+        /* 4. 通道数：先 6，不行就 2 */
+        err = snd_pcm_hw_params_set_channels(m_pcm_handle, params,m_channels);
+        if (err == -EINVAL)
+        { // 硬件不支持 6ch
+            err = snd_pcm_hw_params_set_channels(m_pcm_handle, params, 2);
+            if (err < 0)
+            {
+                std::cerr << "无法设置 2 通道: " << snd_strerror(err) << std::endl;
+                return false;
+            }
+            m_channels = 2;
+            m_downmix = true; // 标记需要软件降混
+        }
+        else if (err < 0)
+        { // 其他错误
+            std::cerr << "无法设置通道数: " << snd_strerror(err) << std::endl;
             return false;
         }
+        else
+        { // 6ch 成功
+            m_channels = 6;
+            m_downmix = false;
+        }
 
-        // 设置采样率
+        /* 5. 采样率 */
         unsigned int rate = m_sample_rate;
         err = snd_pcm_hw_params_set_rate_near(m_pcm_handle, params, &rate, 0);
         if (err < 0)
         {
-            std::cerr << "无法设置音频采样率: " << snd_strerror(err) << std::endl;
+            std::cerr << "无法设置采样率: " << snd_strerror(err) << std::endl;
             return false;
         }
-
-        // 更新实际采样率
         m_sample_rate = rate;
 
-        // 设置缓冲区大小
-        snd_pcm_uframes_t buffer_size = m_sample_rate / 10; // 100ms缓冲
-        err = snd_pcm_hw_params_set_buffer_size_near(m_pcm_handle, params, &buffer_size);
+        /* 6. 缓冲区大小（100 ms） */
+        snd_pcm_uframes_t buf_frames = m_sample_rate / 10;
+        err = snd_pcm_hw_params_set_buffer_size_near(m_pcm_handle, params,
+                                                     &buf_frames);
         if (err < 0)
         {
-            std::cerr << "无法设置音频缓冲区大小: " << snd_strerror(err) << std::endl;
+            std::cerr << "无法设置缓冲区大小: " << snd_strerror(err) << std::endl;
             return false;
         }
 
-        // 应用参数
+        /* 7. 应用参数 */
         err = snd_pcm_hw_params(m_pcm_handle, params);
         if (err < 0)
         {
-            std::cerr << "无法设置音频参数: " << snd_strerror(err) << std::endl;
+            std::cerr << "无法应用硬件参数: " << snd_strerror(err) << std::endl;
             return false;
         }
 
-        std::cout << "音频参数已设置: " << m_sample_rate << "Hz, "
-                  << m_channels << "通道, " << m_format << std::endl;
-
+        std::cout << "音频参数已设置: " << m_sample_rate << " Hz, "
+                  << m_channels << " ch"
+                  << (m_downmix ? " (软件 6→2 降混)" : " (硬件直出)") << std::endl;
         return true;
     }
     // 获取一个采样字节数

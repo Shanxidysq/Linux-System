@@ -57,7 +57,7 @@ int main(int argc,char* argv[])
         file.read(buffer,1024);
         int len=0;
         play.WriteFrame((const uint8_t*)buffer,1024,&len);
-        cout<<"成功写入%d:"<<len<<"字节"<<endl;
+        cout<<"成功写入%d:"<<len<<"帧"<<endl;
         if(file.eof())
         {
             // wav文件读取完毕
