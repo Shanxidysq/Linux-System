@@ -168,56 +168,77 @@ namespace ox
         {
             while (true)
             {
-                // ET模式下必须一次处理完毕数据 即读取到EAGAIN
-                size_t count = read(con->fd,
-                                    con->read_buffer + con->read_len, Connect::read_size - con->read_len);
-                // 正常读取到数据
+                // 确保不会缓冲区溢出
+                size_t remaining = Connect::read_size - con->read_len;
+                if (remaining <= 0)
+                {
+                    // 缓冲区已满，需要处理或关闭连接
+                    std::cerr << "Read buffer full" << std::endl;
+                    handle_close(con);
+                    return;
+                }
+
+                ssize_t count = read(con->fd, con->read_buffer + con->read_len, remaining);
+
                 if (count > 0)
                 {
                     con->read_len += count;
-                    // read_len 大于0 读取到有效数据 并且是一个完整的字符串
-                    if (con->read_len > 0 && con->read_buffer[con->read_len - 1] == '\n')
+
+                    // 查找是否收到完整的一行（以换行符结尾）
+                    for (int j = 0; j < con->read_len; ++j)
                     {
-                        // 将收到的消息转为大写并准备回复
-                        for (size_t i = 0; i < con->read_len - 1; ++i)
+                        if (con->read_buffer[j] == '\n')
                         {
-                            // 读取到的字符串转大写 写入 write_buffer
-                            con->write_buffer[i] = std::toupper(con->read_buffer[i]);
+                            // 处理这一行数据
+                            process_line(con, j + 1); // j+1是这一行的长度
+
+                            // 移动剩余数据到缓冲区开头
+                            int remaining_data = con->read_len - (j + 1);
+                            if (remaining_data > 0)
+                            {
+                                memmove(con->read_buffer,
+                                        con->read_buffer + j + 1,
+                                        remaining_data);
+                            }
+                            con->read_len = remaining_data;
+                            j = -1; // 重新开始搜索，因为可能有多个完整行
                         }
-                        con->write_buffer[con->read_len - 1] = '\n';
-                        con->write_len = con->read_len;
-
-                        // 重置读缓冲区
-                        con->read_len = 0;
-
-                        // 尝试立即写入响应
-                        handle_write(con);
                     }
                 }
                 else if (count == 0)
                 {
-                    // 对方关闭socket连接
-                    std::cout << "Connection closed by client" << std::endl;
+                    // 对方关闭连接
                     handle_close(con);
                     return;
                 }
                 else
                 {
-                    // 错误处理
-                    if (errno == EAGAIN | errno == EWOULDBLOCK)
+                    if (errno == EAGAIN || errno == EWOULDBLOCK)
                     {
-                        // 非阻塞io读取到EAGAIN 正常情况退出
-                        break;
+                        break; // 没有更多数据可读
                     }
                     else
                     {
-                        // 错误处理
-                        perror("read");
+                        perror("read error");
                         handle_close(con);
                         return;
                     }
                 }
             }
+        }
+
+        void process_line(Connect *con, int line_len)
+        {
+            // 将收到的消息转为大写
+            for (int i = 0; i < line_len - 1 && i < Connect::write_size - 1; ++i)
+            {
+                con->write_buffer[i] = std::toupper(con->read_buffer[i]);
+            }
+            con->write_buffer[line_len - 1] = '\n';
+            con->write_len = line_len;
+
+            // 尝试立即写入响应
+            handle_write(con);
         }
 
         /**
@@ -380,7 +401,6 @@ namespace ox
             return true;
         }
 
-        // 运行事件循环
         void run()
         {
             const int MAX_EVENTS = 64;
@@ -388,35 +408,31 @@ namespace ox
 
             while (running)
             {
-                // 返回多少个准备好的套接字
                 int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
                 if (nfds == -1)
                 {
                     if (errno == EINTR)
-                    {
-                        continue; // 被信号中断，继续等待
-                    }
+                        continue;
                     perror("epoll_wait");
                     break;
                 }
 
                 for (int i = 0; i < nfds; ++i)
                 {
-                    // 处理服务器socket（新连接）
-                    if (events[i].data.fd == server_fd)
+                    Connect *conn = static_cast<Connect *>(events[i].data.ptr);
+                    uint32_t event_mask = events[i].events;
+
+                    // 检查是否是服务器socket（新连接）
+                    if (conn->fd == server_fd)
                     {
                         handle_accept();
                         continue;
                     }
 
-                    // 处理客户端连接
-                    Connect *conn = static_cast<Connect *>(events[i].data.ptr);
-                    uint32_t event_mask = events[i].events;
-
                     // 处理错误和挂起事件
-                    if (event_mask & (EPOLLERR | EPOLLHUP))
+                    if (event_mask & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
                     {
-                        handle_error(conn);
+                        handle_close(conn);
                         continue;
                     }
 
