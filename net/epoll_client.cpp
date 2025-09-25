@@ -117,7 +117,7 @@ void Client::connect(const std::string &host, uint16_t port)
     addr.sin_port = htons(port);
     if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1)
         throw_error("inet_pton");
-
+    // 设置套接字的模式 阻塞 非阻塞等
     set_nonblock(fd);
     int rc = ::connect(fd, (struct sockaddr *)&addr, sizeof(addr));
     if (rc < 0 && errno != EINPROGRESS)

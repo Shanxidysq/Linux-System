@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _EPOLL_CLIENT_HPP_
+#define _EPOLL_CLIENT_HPP_
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -29,12 +30,16 @@ public:
     };
     Connection(int fd, const std::string &host, uint16_t port);
     ~Connection();
-
+    // 获取fd 连接套接字
     int fd() const { return fd_; }
+    // 获取连接状态
     State state() const { return state_; }
+    // 设置连接状态
     void set_state(State s) { state_ = s; }
+    // epoll io处理函数
     void handle_write();
     void handle_read();
+    // 发送数据
     void send_data(const std::string &data);
 
 private:
@@ -73,3 +78,4 @@ private:
     Epoll epoll_;
     std::unordered_map<int, std::unique_ptr<Connection>> conns_;
 };
+#endif
