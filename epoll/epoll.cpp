@@ -14,13 +14,17 @@
 
 namespace ox
 {
+    // connect连接类
     class Connect
     {
     public:
+        // 读写缓冲区大小
+        // reactor模型下需要有读写缓冲区
         static const int read_size = 1024;
         static const int write_size = 1024;
 
     public:
+        // 读写缓冲区和fd文件socket描述符
         int fd;
         char read_buffer[read_size];
         char write_buffer[write_size];
@@ -49,13 +53,17 @@ namespace ox
     class EpollServer
     {
     private:
+        // server_fd 监听套接字
+        // epolln内核事件表
         int server_fd;
         int epoll_fd;
         bool running;
         std::unordered_map<int, std::unique_ptr<Connect>> connections;
 
+        // 设置fd套接字非阻塞
         bool set_nonblocking(int fd)
         {
+            // fcntl接口可以设置文件描述符属性 GETFL获取文件描述符的属性
             int flags = fcntl(fd, F_GETFL, 0);
             if (flags == -1)
             {
@@ -70,6 +78,7 @@ namespace ox
             return true;
         }
 
+        //  epoll操作接口 给fd注册epoll事件
         bool epoll_ctl_op(int op, int fd, uint32_t events, Connect *con)
         {
             struct epoll_event ev;
@@ -84,6 +93,7 @@ namespace ox
             return true;
         }
 
+        // 处理监听套接字的新连接
         void handle_accept()
         {
             struct sockaddr_in client_addr;
@@ -113,10 +123,12 @@ namespace ox
             connections[client_fd] = std::move(con);
         }
 
+        // 处理读事件
         void handle_read(Connect *con)
         {
             while (true)
             {
+                // 非阻塞套接字读取到EAGAIN退出
                 ssize_t count = read(con->fd, con->read_buffer + con->read_len,
                                      Connect::read_size - con->read_len);
 
@@ -149,6 +161,7 @@ namespace ox
                         }
                     }
                 }
+                // ==0 对方关闭套接字
                 else if (count == 0)
                 {
                     // 对方关闭连接
@@ -172,6 +185,7 @@ namespace ox
             }
         }
 
+        // 处理写请求
         void handle_write(Connect *con)
         {
             if (con->write_len <= 0)
@@ -185,8 +199,11 @@ namespace ox
                 return;
             }
 
+            // 写缓冲区写数据，write_buffer write_len个字节
+            // 返回就是成功写入的字节数
             ssize_t count = write(con->fd, con->write_buffer, con->write_len);
 
+            // 成功写入，移动缓冲区数据
             if (count > 0)
             {
                 con->write_len -= count;
@@ -195,6 +212,7 @@ namespace ox
                     memmove(con->write_buffer, con->write_buffer + count, con->write_len);
                 }
 
+                // 缓冲区内还有数据继续写入
                 if (con->write_len > 0)
                 {
                     if (!con->want_write)
@@ -233,11 +251,13 @@ namespace ox
             }
         }
 
+        // 关闭连接
         void handle_close(Connect *con)
         {
             connections.erase(con->fd);
         }
 
+        // 处理错误
         void handle_error(Connect *conn)
         {
             std::cerr << "Error occurred on connection" << std::endl;
@@ -300,6 +320,7 @@ namespace ox
             // 创建服务器连接的Connect对象
             auto server_con = std::make_unique<Connect>(server_fd);
 
+            // 注册监听事件到epoll的内核事件表
             if (!epoll_ctl_op(EPOLL_CTL_ADD, server_fd, EPOLLIN | EPOLLET, server_con.get()))
             {
                 close(server_fd);
@@ -307,6 +328,7 @@ namespace ox
                 return false;
             }
 
+            // 添加到map里面
             connections[server_fd] = std::move(server_con);
 
             running = true;
