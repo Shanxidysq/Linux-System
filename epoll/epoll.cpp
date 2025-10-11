@@ -12,6 +12,9 @@
 #include <memory>
 #include <functional>
 
+
+// 这里增加reactor模式，是在epoll的基础上进行任务的添加函数直接采用gpt的reactor模式？？
+// 这里这几天需要了解一下
 namespace ox
 {
     // connect连接类
@@ -341,6 +344,8 @@ namespace ox
             const int MAX_EVENTS = 64;
             struct epoll_event events[MAX_EVENTS];
 
+            // running就是运行标志
+            // 后续目标就是先添加epoll处理io复用，然后再增加线程池
             while (running)
             {
                 int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
